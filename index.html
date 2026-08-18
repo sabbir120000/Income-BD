@@ -14,11 +14,11 @@
             --primary-color: #06b6d4; /* Vibrant Cyan */
             --secondary-color: #6366f1; /* Deep Indigo */
             --accent-glow: rgba(6, 182, 212, 0.35);
-            --bg-color: #0f172a; /* Deep Navy Slate (চোখে পড়ার মতো প্রিমিয়াম কালার) */
+            --bg-color: #0f172a; /* Deep Navy Slate */
             --card-bg: #1e293b; /* Ultra Clear Slate Card */
             --card-border: #334155; /* Sharp Border */
-            --text-main: #ffffff; /* একদম স্পষ্ট সাদা লেখা */
-            --text-sub: #cbd5e1; /* পরিষ্কার ও উজ্জ্বল সাব-টেক্সট */
+            --text-main: #ffffff; 
+            --text-sub: #cbd5e1; 
             --success: #10b981; 
             --danger: #ef4444; 
             --pending: #f59e0b;
@@ -215,11 +215,9 @@
             <!-- TASKS PAGE -->
             <div id="tasks-page" class="page">
                 <div class="card wallet-card">
-                    <h3 style="color: #cbd5e1; font-size: 0.9rem;">Earning Wallet</h3>
+                    <h3 style="color: #cbd5e1; font-size: 0.9rem;">Main Balance</h3>
                     <h1 style="font-size: 2.2rem; color: #fff; margin: 10px 0;"><span id="earning-wallet">0.00</span> TK</h1>
-                    <p style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 10px;">Minimum <span id="min-transfer-text">100</span> TK to transfer.</p>
-                    <div style="background: #334155; height: 6px; border-radius: 3px; margin-bottom: 15px; overflow: hidden;"><div id="ad-progress-bar" style="width: 0%; height: 100%; background: var(--primary-color);"></div></div>
-                    <button id="move-balance-btn" class="btn-primary" disabled>Transfer to Main Balance</button>
+                    <div style="background: #334155; height: 6px; border-radius: 3px; margin-top: 15px; overflow: hidden;"><div id="ad-progress-bar" style="width: 0%; height: 100%; background: var(--primary-color);"></div></div>
                 </div>
                 <h3 style="margin: 25px 0 15px; font-size: 1rem; color: #f1f5f9;">Watch & Earn</h3>
                 <div id="ad-task-area"></div>
@@ -292,7 +290,7 @@
         if (tg.setBackgroundColor) tg.setBackgroundColor('#0f172a');
 
         const firebaseConfig = {
-             apiKey: "AIzaSyCkFhRf29mtT_zo3piBk67UK6WhZ5QPis4",
+           apiKey: "AIzaSyCkFhRf29mtT_zo3piBk67UK6WhZ5QPis4",
   authDomain: "jokii-ea04f.firebaseapp.com",
   databaseURL: "https://jokii-ea04f-default-rtdb.firebaseio.com",
   projectId: "jokii-ea04f",
@@ -303,7 +301,6 @@
         };
 
         let db, appConfig = {}, userState = {}, tgUser = {};
-        let earningWallet = 0;
         let leaderboard = { ref: [], earn: [] };
         let transactions = [];
         let isAdSdkLoaded = false; 
@@ -414,7 +411,6 @@
                     const today = new Date().toISOString().slice(0, 10);
                     if (data.lastAdWatchDate !== today) { data.dailyAdCount = 0; data.lastAdWatchDate = today; ref.update({ dailyAdCount: 0, lastAdWatchDate: today }); }
                     userState = data;
-                    earningWallet = parseFloat(localStorage.getItem(`ew_${tgUser.id}`) || '0');
                     renderAll();
                     resolve();
                 });
@@ -454,12 +450,9 @@
             document.getElementById('total-income').innerText = (userState.totalEarned || 0).toFixed(2);
             renderChart(); renderHomeButtons();
             
-            const minLimit = parseFloat(appConfig.minMoveToBalance || 100);
-            document.getElementById('earning-wallet').innerText = earningWallet.toFixed(2);
-            document.getElementById('min-transfer-text').innerText = minLimit;
-            
+            // সরাসরি মেইন ব্যালেন্স প্রদর্শন করা হচ্ছে
+            document.getElementById('earning-wallet').innerText = (userState.balance || 0).toFixed(2);
             document.getElementById('ad-progress-bar').style.width = `${Math.min(100, ((userState.dailyAdCount || 0) / (appConfig.dailyAdLimit || 1)) * 100)}%`;
-            document.getElementById('move-balance-btn').disabled = earningWallet < minLimit;
             
             renderTasks(); renderWithdrawOptions();
             document.getElementById('ref-link-input').value = `https://t.me/${appConfig.botUsername || ''}/app?startapp=${tgUser.id}`;
@@ -631,17 +624,19 @@
                 closePopup();
                 
                 const v = appConfig.adValue || 0; 
-                earningWallet += v; 
-                localStorage.setItem(`ew_${tgUser.id}`, earningWallet);
                 
-                const u = { dailyAdCount: (userState.dailyAdCount || 0) + 1, lifetimeAdCount: (userState.lifetimeAdCount || 0) + 1, totalEarned: (userState.totalEarned || 0) + v };
+                // এড দেখার সাথে সাথে সরাসরি নীরবে মেইন ব্যালেন্স এ জমা হওয়ার লজিক
+                const u = { 
+                    dailyAdCount: (userState.dailyAdCount || 0) + 1, 
+                    lifetimeAdCount: (userState.lifetimeAdCount || 0) + 1, 
+                    totalEarned: (userState.totalEarned || 0) + v,
+                    balance: firebase.database.ServerValue.increment(v)
+                };
                 if ((u.dailyAdCount % appConfig.adsPerBreak) === 0 && appConfig.adsPerBreak > 0) u.breakUntil = Date.now() + (appConfig.breakDuration * 60000);
                 
                 await db.ref(`users/${tgUser.id}`).update(u);
                 await db.ref(`userEarnings/${tgUser.id}/${new Date().toISOString().slice(0, 10)}`).set(firebase.database.ServerValue.increment(v));
                 
-                if (tg.showAlert) tg.showAlert(`+${v} TK Added!`); 
-                else alert(`+${v} TK Added!`);
                 renderAll();
             } catch (e) { 
                 closePopup(); 
@@ -650,21 +645,6 @@
             }
         }
 
-        document.getElementById('move-balance-btn').addEventListener('click', async () => {
-            const min = parseFloat(appConfig.minMoveToBalance || 100);
-            if (earningWallet < min) return;
-            const btn = document.getElementById('move-balance-btn'); btn.disabled = true; btn.innerText = "Processing...";
-            try {
-                await db.ref(`users/${tgUser.id}/balance`).set(firebase.database.ServerValue.increment(earningWallet));
-                earningWallet = 0; localStorage.setItem(`ew_${tgUser.id}`, 0);
-                if (tg.showAlert) tg.showAlert("Balance moved!"); renderAll();
-            } catch(e) { 
-                if (tg.showAlert) tg.showAlert("Error moving balance"); 
-            } finally { 
-                btn.innerText = "Transfer to Main Balance"; 
-            }
-        });
-
         function doTask(id, url, reward) {
             if (tg.openLink) tg.openLink(url); else window.open(url, '_blank');
             showPopup(`<h3>Checking...</h3><p>Wait 5s...</p>`);
@@ -672,8 +652,9 @@
                 closePopup();
                 try {
                     await db.ref(`users/${tgUser.id}/completedTasks/${id}`).set(true);
+                    // টাস্ক সম্পন্ন করার পর সরাসরি নীরবে মেইন ব্যালেন্সে জমা হবে
                     await db.ref(`users/${tgUser.id}/balance`).set(firebase.database.ServerValue.increment(reward));
-                    if (tg.showAlert) tg.showAlert(`+${reward} TK`); renderAll();
+                    renderAll();
                 } catch(e) { if (tg.showAlert) tg.showAlert("Error"); }
             }, 5000);
         }
@@ -687,7 +668,6 @@
             if (!conf) return;
             if (amt < conf.min) { if (tg.showAlert) tg.showAlert(`Min: ${conf.min}`); return; }
             if (amt > userState.balance) { if (tg.showAlert) tg.showAlert("Low Balance"); return; }
-            if (appConfig.minimumWithdrawReferrals && userState.referrals < appConfig.minimumWithdrawReferrals) { if (tg.showAlert) tg.showAlert(`Need ${appConfig.minimumWithdrawReferrals} refs`); return; }
 
             const btn = document.getElementById('w-submit-btn'); btn.disabled = true; btn.innerText = "Sending...";
             try {
@@ -702,15 +682,4 @@
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
-</html><!DOCTYPE html>
-<html>
-  <head>
-    <title>Hello, World!</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-      <h1 class="title">Hello World!</h1>
-      <p id="currentTime"></p>
-      <script src="script.js"></script>
-  </body>
 </html>
